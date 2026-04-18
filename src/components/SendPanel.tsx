@@ -15,7 +15,7 @@ const TOKEN_CONFIG: Record<string, { label: string; sendAs: string }> = {
 };
 
 export function SendPanel() {
-  const { isConnected, address } = useAccount();
+  const { isConnected, address, connector } = useAccount();
   const { copy, language } = useUISettings();
   const [recipient, setRecipient] = useState("");
   const [amount, setAmount] = useState("");
@@ -33,7 +33,7 @@ export function SendPanel() {
     try {
       setTx({ status: "pending", message: isZh ? "请在钱包中确认..." : "Confirm in your wallet..." });
 
-      const adapter = await createAdapter();
+      const adapter = await createAdapter(connector);
       const result = await getAppKit().send({
         from: { adapter, chain: "Arc_Testnet" },
         to: recipient,

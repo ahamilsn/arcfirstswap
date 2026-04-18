@@ -1,9 +1,17 @@
 "use client";
 
 import type { BridgeResult } from "@circle-fin/app-kit";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAccount } from "wagmi";
-import { useArcBalances } from "@/hooks/useArcBalances";
+import {
+  arcTestnet,
+  arbitrumSepolia,
+  baseSepolia,
+  optimismSepolia,
+  sepolia,
+  TOKEN_ADDRESSES,
+} from "@/config/chains";
+import { useTokenBalance } from "@/hooks/useTokenBalance";
 import { createAdapter, getAppKit, INITIAL_TX_STATE, type TxState } from "@/lib/appkit";
 import { useUISettings } from "@/providers/UISettingsProvider";
 import { PanelConnectButton } from "./PanelConnectButton";
@@ -26,22 +34,96 @@ type BridgeChainId =
 
 const QUICK_PERCENTAGES = [10, 25, 50, 100] as const;
 
+const BRIDGE_BALANCE_CONFIG: Record<
+  BridgeChainId,
+  { chainId: number; tokenAddress: `0x${string}` }
+> = {
+  Arc_Testnet: {
+    chainId: arcTestnet.id,
+    tokenAddress: TOKEN_ADDRESSES.arcTestnet.USDC,
+  },
+  Ethereum_Sepolia: {
+    chainId: sepolia.id,
+    tokenAddress: TOKEN_ADDRESSES.sepolia.USDC,
+  },
+  Base_Sepolia: {
+    chainId: baseSepolia.id,
+    tokenAddress: TOKEN_ADDRESSES.baseSepolia.USDC,
+  },
+  Optimism_Sepolia: {
+    chainId: optimismSepolia.id,
+    tokenAddress: TOKEN_ADDRESSES.optimismSepolia.USDC,
+  },
+  Arbitrum_Sepolia: {
+    chainId: arbitrumSepolia.id,
+    tokenAddress: TOKEN_ADDRESSES.arbitrumSepolia.USDC,
+  },
+};
+
 export function BridgePanel() {
-  const { isConnected } = useAccount();
+  const { isConnected, connector } = useAccount();
   const { copy, language } = useUISettings();
-  const { usdcBalance } = useArcBalances();
   const [from, setFrom] = useState<BridgeChainId>("Ethereum_Sepolia");
   const [to, setTo] = useState<BridgeChainId>("Arc_Testnet");
   const [amount, setAmount] = useState("");
   const [tx, setTx] = useState<TxState>(INITIAL_TX_STATE);
+  const sourceTokenConfig = BRIDGE_BALANCE_CONFIG[from];
+  const {
+    balance: sourceBalance,
+    isLoading: sourceBalanceLoading,
+    refetch: refetchSourceBalance,
+  } = useTokenBalance({
+    chainId: sourceTokenConfig.chainId,
+    tokenAddress: sourceTokenConfig.tokenAddress,
+    decimals: 6,
+  });
 
   const busy = tx.status !== "idle" && tx.status !== "success" && tx.status !== "error";
   const isZh = language === "zh";
-  const selectedBalance = Number.parseFloat(usdcBalance ?? "0");
+  const selectedBalance = Number.parseFloat(sourceBalance ?? "0");
+  const walletBalanceLabel = language === "zh" ? "\u94b1\u5305\u4f59\u989d" : "Wallet balance";
+  const loadingBalanceLabel = language === "zh" ? "\u8bfb\u53d6\u4e2d..." : "Loading...";
+  const exceedsBalanceLabel =
+    language === "zh"
+      ? "\u8f93\u5165\u91d1\u989d\u5df2\u8d85\u51fa\u94b1\u5305\u4f59\u989d"
+      : "Amount exceeds your wallet balance";
   const optionStyle = {
     background: "rgb(var(--arc-surface))",
     color: "rgb(var(--arc-white))",
   };
+  const numericAmount = Number.parseFloat(amount || "0");
+  const exceedsBalance =
+    amount !== "" && Number.isFinite(numericAmount) && numericAmount > selectedBalance;
+
+  useEffect(() => {
+    if (tx.status !== "success" && tx.status !== "error") {
+      return;
+    }
+
+    if (tx.status === "success") {
+      void refetchSourceBalance();
+      const refreshTimer = window.setTimeout(() => {
+        void refetchSourceBalance();
+      }, 2500);
+
+      const resetTimer = window.setTimeout(() => {
+        setTx(INITIAL_TX_STATE);
+      }, 7000);
+
+      return () => {
+        window.clearTimeout(refreshTimer);
+        window.clearTimeout(resetTimer);
+      };
+    }
+
+    const resetTimer = window.setTimeout(() => {
+      setTx(INITIAL_TX_STATE);
+    }, 7000);
+
+    return () => {
+      window.clearTimeout(resetTimer);
+    };
+  }, [refetchSourceBalance, tx.status]);
 
   function flip() {
     setFrom(to);
@@ -94,7 +176,7 @@ export function BridgePanel() {
     try {
       setTx({ status: "pending", message: isZh ? "请在钱包中确认..." : "Confirm in your wallet..." });
 
-      const adapter = await createAdapter();
+      const adapter = await createAdapter(connector);
 
       const result: BridgeResult = await kit.bridge({
         from: { adapter, chain: from },
@@ -173,7 +255,13 @@ export function BridgePanel() {
       <div className="air-section">
         <label className="mb-1.5 flex justify-between text-xs text-arc-muted">
           <span>{copy.bridge.amount}</span>
-          <span className="text-arc-green">USDC</span>
+          <span className="font-mono text-[11px] text-arc-green">
+            {isConnected
+              ? `${walletBalanceLabel}: ${
+                  sourceBalanceLoading ? loadingBalanceLabel : sourceBalance
+                } USDC`
+              : "USDC"}
+          </span>
         </label>
         <div className="relative">
           <input
@@ -188,6 +276,9 @@ export function BridgePanel() {
           />
           <span className="token-tag absolute right-3 top-1/2 -translate-y-1/2">USDC</span>
         </div>
+        {exceedsBalance && (
+          <p className="mt-2 text-xs text-arc-error">{exceedsBalanceLabel}</p>
+        )}
         <div className="mt-3 flex gap-2">
           {QUICK_PERCENTAGES.map((value) => (
             <button
@@ -218,7 +309,11 @@ export function BridgePanel() {
       {!isConnected ? (
         <PanelConnectButton />
       ) : (
-        <button onClick={submit} disabled={busy || !amount || +amount <= 0} className="btn-primary">
+        <button
+          onClick={submit}
+          disabled={busy || !amount || +amount <= 0 || exceedsBalance}
+          className="btn-primary"
+        >
           {busy ? copy.bridge.submitting : `${copy.bridge.submitPrefix} ${amount ? `${amount} ` : ""}USDC`}
         </button>
       )}

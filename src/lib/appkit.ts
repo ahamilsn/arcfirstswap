@@ -3,6 +3,12 @@ import { createViemAdapterFromProvider } from "@circle-fin/adapter-viem-v2";
 
 let kitInstance: AppKit | null = null;
 
+type ProviderLike = Parameters<typeof createViemAdapterFromProvider>[0]["provider"];
+
+type ConnectorLike = {
+  getProvider: () => Promise<unknown>;
+};
+
 export function getAppKit(): AppKit {
   if (!kitInstance) {
     kitInstance = new AppKit();
@@ -10,15 +16,39 @@ export function getAppKit(): AppKit {
   return kitInstance;
 }
 
-/**
- * Creates a ViemAdapter from the browser's EIP1193 provider (MetaMask, WalletConnect, etc.)
- * Uses createViemAdapterFromProvider — the correct factory per SDK v1.8 docs.
- */
-export async function createAdapter() {
-  if (typeof window === "undefined" || !window.ethereum) {
-    throw new Error("No wallet detected. Please install MetaMask.");
+function isProviderLike(value: unknown): value is ProviderLike {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    "request" in value &&
+    "on" in value &&
+    "removeListener" in value
+  );
+}
+
+export async function createAdapter(connector?: ConnectorLike | null) {
+  let provider: ProviderLike | null = null;
+
+  if (connector) {
+    try {
+      const connectorProvider = await connector.getProvider();
+      if (isProviderLike(connectorProvider)) {
+        provider = connectorProvider;
+      }
+    } catch {
+      // Fall back to the injected provider below.
+    }
   }
-  return createViemAdapterFromProvider({ provider: window.ethereum });
+
+  if (!provider && typeof window !== "undefined" && isProviderLike(window.ethereum)) {
+    provider = window.ethereum;
+  }
+
+  if (!provider) {
+    throw new Error("No compatible wallet provider was found.");
+  }
+
+  return createViemAdapterFromProvider({ provider });
 }
 
 export const KIT_KEY = (process.env.NEXT_PUBLIC_KIT_KEY ?? "").trim();

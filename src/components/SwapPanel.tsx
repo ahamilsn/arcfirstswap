@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAccount } from "wagmi";
 import { useArcBalances } from "@/hooks/useArcBalances";
 import { createAdapter, getAppKit, INITIAL_TX_STATE, KIT_KEY, type TxState } from "@/lib/appkit";
@@ -12,9 +12,9 @@ const TOKENS = ["USDC", "EURC"] as const;
 const QUICK_PERCENTAGES = [10, 25, 50, 100] as const;
 
 export function SwapPanel() {
-  const { isConnected } = useAccount();
+  const { isConnected, connector } = useAccount();
   const { copy, language } = useUISettings();
-  const { usdcBalance, eurcBalance } = useArcBalances();
+  const { usdcBalance, eurcBalance, refetch: refetchBalances } = useArcBalances();
   const [tokenIn, setTokenIn] = useState<(typeof TOKENS)[number]>("USDC");
   const [tokenOut, setTokenOut] = useState<(typeof TOKENS)[number]>("EURC");
   const [amountIn, setAmountIn] = useState("");
@@ -33,7 +33,50 @@ export function SwapPanel() {
     USDC: usdcBalance,
     EURC: eurcBalance,
   };
-  const selectedBalance = Number.parseFloat(tokenBalances[tokenIn] ?? "0");
+  const tokenBalanceValues = {
+    USDC: Number.parseFloat(usdcBalance ?? "0"),
+    EURC: Number.parseFloat(eurcBalance ?? "0"),
+  };
+  const selectedBalance = tokenBalanceValues[tokenIn];
+  const selectedOutputBalance = tokenBalances[tokenOut] ?? "0.0000";
+  const walletBalanceLabel = language === "zh" ? "\u94b1\u5305\u4f59\u989d" : "Wallet balance";
+  const exceedsBalanceLabel =
+    language === "zh"
+      ? "\u8f93\u5165\u91d1\u989d\u5df2\u8d85\u51fa\u94b1\u5305\u4f59\u989d"
+      : "Amount exceeds your wallet balance";
+  const numericAmountIn = Number.parseFloat(amountIn || "0");
+  const exceedsBalance =
+    amountIn !== "" && Number.isFinite(numericAmountIn) && numericAmountIn > selectedBalance;
+
+  useEffect(() => {
+    if (tx.status !== "success" && tx.status !== "error") {
+      return;
+    }
+
+    if (tx.status === "success") {
+      void refetchBalances();
+      const refreshTimer = window.setTimeout(() => {
+        void refetchBalances();
+      }, 2500);
+
+      const resetTimer = window.setTimeout(() => {
+        setTx(INITIAL_TX_STATE);
+      }, 7000);
+
+      return () => {
+        window.clearTimeout(refreshTimer);
+        window.clearTimeout(resetTimer);
+      };
+    }
+
+    const resetTimer = window.setTimeout(() => {
+      setTx(INITIAL_TX_STATE);
+    }, 7000);
+
+    return () => {
+      window.clearTimeout(resetTimer);
+    };
+  }, [refetchBalances, tx.status]);
 
   function flip() {
     const nextTokenIn = tokenOut;
@@ -71,7 +114,16 @@ export function SwapPanel() {
     nextTokenIn = tokenIn,
     nextTokenOut = tokenOut,
   ) {
-    if (!nextAmount || +nextAmount <= 0) {
+    const parsedAmount = Number.parseFloat(nextAmount || "0");
+    const availableBalance = tokenBalanceValues[nextTokenIn];
+
+    if (!nextAmount || parsedAmount <= 0) {
+      setEstimated(null);
+      setEstimating(false);
+      return;
+    }
+
+    if (parsedAmount > availableBalance) {
       setEstimated(null);
       setEstimating(false);
       return;
@@ -81,7 +133,7 @@ export function SwapPanel() {
     setEstimating(true);
 
     try {
-      const adapter = await createAdapter();
+      const adapter = await createAdapter(connector);
       const result = await getAppKit().estimateSwap({
         from: { adapter, chain: "Arc_Testnet" },
         tokenIn: nextTokenIn,
@@ -108,7 +160,7 @@ export function SwapPanel() {
     if (!amountIn) return;
     try {
       setTx({ status: "estimating", message: isZh ? "正在获取报价..." : "Getting quote..." });
-      const adapter = await createAdapter();
+      const adapter = await createAdapter(connector);
       setTx({ status: "pending", message: isZh ? "请在钱包中确认..." : "Confirm in your wallet..." });
 
       const result = await getAppKit().swap({
@@ -143,7 +195,14 @@ export function SwapPanel() {
       </p>
 
       <div className="air-section">
-        <label className="mb-1.5 block text-xs text-arc-muted">{copy.swap.youPay}</label>
+        <label className="mb-1.5 flex items-center justify-between gap-3 text-xs text-arc-muted">
+          <span>{copy.swap.youPay}</span>
+          {isConnected && (
+            <span className="font-mono text-[11px] text-arc-green">
+              {walletBalanceLabel}: {tokenBalances[tokenIn]} {tokenIn}
+            </span>
+          )}
+        </label>
         <div className="relative">
           <input
             type="number"
@@ -179,6 +238,9 @@ export function SwapPanel() {
             ))}
           </select>
         </div>
+        {exceedsBalance && (
+          <p className="mt-2 text-xs text-arc-error">{exceedsBalanceLabel}</p>
+        )}
       </div>
 
       <div className="flex justify-center">
@@ -188,7 +250,14 @@ export function SwapPanel() {
       </div>
 
       <div className="air-section">
-        <label className="mb-1.5 block text-xs text-arc-muted">{copy.swap.youReceive}</label>
+        <label className="mb-1.5 flex items-center justify-between gap-3 text-xs text-arc-muted">
+          <span>{copy.swap.youReceive}</span>
+          {isConnected && (
+            <span className="font-mono text-[11px] text-arc-muted">
+              {walletBalanceLabel}: {selectedOutputBalance} {tokenOut}
+            </span>
+          )}
+        </label>
         <div className="relative">
           <input
             readOnly
@@ -251,7 +320,7 @@ export function SwapPanel() {
       ) : (
         <button
           onClick={submit}
-          disabled={busy || !amountIn || +amountIn <= 0 || tokenIn === tokenOut}
+          disabled={busy || !amountIn || +amountIn <= 0 || tokenIn === tokenOut || exceedsBalance}
           className="btn-primary"
         >
           {busy ? copy.swap.submitting : `${copy.swap.submitPrefix} ${tokenIn} -> ${tokenOut}`}

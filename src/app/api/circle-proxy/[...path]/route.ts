@@ -11,6 +11,22 @@ async function handler(
   { params }: { params: { path: string[] } }
 ) {
   const path = params.path.join("/");
+  const allowedPathPrefix = "v1/stablecoinKits/";
+
+  if (!path.startsWith(allowedPathPrefix)) {
+    return NextResponse.json(
+      { error: "Proxy path not allowed" },
+      { status: 403 }
+    );
+  }
+
+  if (!["GET", "POST", "HEAD"].includes(request.method)) {
+    return NextResponse.json(
+      { error: "Method not allowed" },
+      { status: 405 }
+    );
+  }
+
   const { searchParams } = new URL(request.url);
   const qs = searchParams.toString();
   const targetUrl = `${CIRCLE_BASE}/${path}${qs ? `?${qs}` : ""}`;
@@ -45,7 +61,7 @@ async function handler(
       status: upstream.status,
       headers: {
         "Content-Type": upstream.headers.get("Content-Type") ?? "application/json",
-        "Access-Control-Allow-Origin": "*",
+        "Cache-Control": "no-store",
       },
     });
   } catch (err) {
@@ -58,16 +74,14 @@ async function handler(
 
 export const GET    = handler;
 export const POST   = handler;
-export const PUT    = handler;
-export const DELETE = handler;
+export const HEAD   = handler;
 
 export async function OPTIONS() {
   return new NextResponse(null, {
     status: 204,
     headers: {
-      "Access-Control-Allow-Origin":  "*",
-      "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-      "Access-Control-Allow-Headers": "*",
+      "Allow": "GET, POST, HEAD, OPTIONS",
+      "Cache-Control": "no-store",
     },
   });
 }
