@@ -20,6 +20,7 @@ export function SwapPanel() {
   const [amountIn, setAmountIn] = useState("");
   const [estimated, setEstimated] = useState<string | null>(null);
   const [estimating, setEstimating] = useState(false);
+  const [quoteError, setQuoteError] = useState<string | null>(null);
   const [tx, setTx] = useState<TxState>(INITIAL_TX_STATE);
   const estimateRequestRef = useRef(0);
 
@@ -44,6 +45,10 @@ export function SwapPanel() {
     language === "zh"
       ? "\u8f93\u5165\u91d1\u989d\u5df2\u8d85\u51fa\u94b1\u5305\u4f59\u989d"
       : "Amount exceeds your wallet balance";
+  const quoteUnavailableLabel =
+    language === "zh"
+      ? "\u6682\u65f6\u65e0\u6cd5\u83b7\u53d6\u62a5\u4ef7"
+      : "Quote unavailable right now";
   const numericAmountIn = Number.parseFloat(amountIn || "0");
   const exceedsBalance =
     amountIn !== "" && Number.isFinite(numericAmountIn) && numericAmountIn > selectedBalance;
@@ -78,6 +83,30 @@ export function SwapPanel() {
     };
   }, [refetchBalances, tx.status]);
 
+  useEffect(() => {
+    if (!isConnected) {
+      setEstimated(null);
+      setEstimating(false);
+      setQuoteError(null);
+      return;
+    }
+
+    if (!amountIn || numericAmountIn <= 0 || exceedsBalance || tokenIn === tokenOut) {
+      setEstimated(null);
+      setEstimating(false);
+      setQuoteError(null);
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      void estimateQuote(amountIn, tokenIn, tokenOut);
+    }, 300);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [amountIn, exceedsBalance, isConnected, numericAmountIn, tokenIn, tokenOut]);
+
   function flip() {
     const nextTokenIn = tokenOut;
     const nextTokenOut = tokenIn;
@@ -106,7 +135,7 @@ export function SwapPanel() {
 
     setAmountIn(normalizedAmount);
     setEstimated(null);
-    void estimateQuote(normalizedAmount);
+    setQuoteError(null);
   }
 
   async function estimateQuote(
@@ -120,17 +149,20 @@ export function SwapPanel() {
     if (!nextAmount || parsedAmount <= 0) {
       setEstimated(null);
       setEstimating(false);
+      setQuoteError(null);
       return;
     }
 
     if (parsedAmount > availableBalance) {
       setEstimated(null);
       setEstimating(false);
+      setQuoteError(null);
       return;
     }
 
     const requestId = ++estimateRequestRef.current;
     setEstimating(true);
+    setQuoteError(null);
 
     try {
       const adapter = await createAdapter(connector);
@@ -144,10 +176,13 @@ export function SwapPanel() {
 
       if (estimateRequestRef.current === requestId) {
         setEstimated(result.estimatedOutput?.amount ?? null);
+        setQuoteError(null);
       }
-    } catch {
+    } catch (err: unknown) {
       if (estimateRequestRef.current === requestId) {
         setEstimated(null);
+        const message = err instanceof Error ? err.message : String(err);
+        setQuoteError(message.slice(0, 160));
       }
     } finally {
       if (estimateRequestRef.current === requestId) {
@@ -210,8 +245,8 @@ export function SwapPanel() {
             onChange={(e) => {
               setAmountIn(e.target.value);
               setEstimated(null);
+              setQuoteError(null);
             }}
-            onBlur={() => void estimateQuote(amountIn)}
             placeholder="0.00"
             min="0"
             step="0.01"
@@ -285,6 +320,11 @@ export function SwapPanel() {
             ))}
           </select>
         </div>
+        {!exceedsBalance && quoteError && (
+          <p className="mt-2 text-xs text-arc-warning">
+            {quoteUnavailableLabel}: {quoteError}
+          </p>
+        )}
       </div>
 
       <div className="flex gap-2">

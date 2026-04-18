@@ -2,8 +2,21 @@ import { type NextRequest, NextResponse } from "next/server";
 
 const CIRCLE_BASE = "https://api.circle.com";
 
-// Circle API Key — only available server-side, never exposed to browser
-const CIRCLE_API_KEY = process.env.CIRCLE_API_KEY ?? "";
+function getServerKitKey() {
+  const candidates = [
+    process.env.CIRCLE_API_KEY,
+    process.env.NEXT_PUBLIC_KIT_KEY,
+  ];
+
+  for (const candidate of candidates) {
+    const normalized = candidate?.trim();
+    if (normalized?.startsWith("KIT_KEY:")) {
+      return normalized;
+    }
+  }
+
+  return "";
+}
 
 /**
  * Proxies browser requests to api.circle.com/v1/stablecoinKits/* server-side,
@@ -34,25 +47,26 @@ async function handler(
   const qs = searchParams.toString();
   const targetUrl = `${CIRCLE_BASE}/${path}${qs ? `?${qs}` : ""}`;
 
-  // Forward relevant headers (Authorization, Content-Type, kit key header, etc.)
   const forwardHeaders: Record<string, string> = {
     "Content-Type": "application/json",
   };
-  const authHeader = request.headers.get("authorization");
-  if (authHeader) forwardHeaders["Authorization"] = authHeader;
+  const authHeader = request.headers.get("authorization")?.trim();
+  const serverKitKey = getServerKitKey();
 
-  const xApiKey = request.headers.get("x-api-key");
-  if (xApiKey) forwardHeaders["x-api-key"] = xApiKey;
-
-  // Add server-side Circle API key (overrides any client-supplied key)
-  if (CIRCLE_API_KEY) forwardHeaders["x-api-key"] = CIRCLE_API_KEY;
-
-  // Copy any x-* headers the SDK might send
   request.headers.forEach((value, key) => {
-    if (key.startsWith("x-") && !["x-forwarded-for", "x-real-ip"].includes(key)) {
+    if (
+      key.startsWith("x-") &&
+      !["x-forwarded-for", "x-real-ip", "x-api-key"].includes(key)
+    ) {
       forwardHeaders[key] = value;
     }
   });
+
+  if (serverKitKey) {
+    forwardHeaders["Authorization"] = `Bearer ${serverKitKey}`;
+  } else if (authHeader) {
+    forwardHeaders["Authorization"] = authHeader;
+  }
 
   try {
     const upstream = await fetch(targetUrl, {
@@ -78,15 +92,15 @@ async function handler(
   }
 }
 
-export const GET    = handler;
-export const POST   = handler;
-export const HEAD   = handler;
+export const GET = handler;
+export const POST = handler;
+export const HEAD = handler;
 
 export async function OPTIONS() {
   return new NextResponse(null, {
     status: 204,
     headers: {
-      "Allow": "GET, POST, HEAD, OPTIONS",
+      Allow: "GET, POST, HEAD, OPTIONS",
       "Cache-Control": "no-store",
     },
   });

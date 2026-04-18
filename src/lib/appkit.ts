@@ -53,7 +53,7 @@ export async function createAdapter(connector?: ConnectorLike | null) {
 
 // Circle API Key is set server-side only via CIRCLE_API_KEY env var
 // Browser-side uses empty string — key never exposed to frontend
-export const KIT_KEY = "";
+export const KIT_KEY = "KIT_KEY:server-managed:server-managed";
 
 export type TxStatus =
   | "idle"

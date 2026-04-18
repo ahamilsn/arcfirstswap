@@ -40,6 +40,7 @@ export function Header() {
   const { copy, language, theme, toggleLanguage, toggleTheme } = useUISettings();
   const wrongNetwork = isConnected && chainId !== arcTestnet.id;
   const disconnectLabel = language === "zh" ? "\u65ad\u5f00\u8fde\u63a5" : "Disconnect";
+  const subtitle = language === "zh" ? "ARC 的兑换和跨链平台" : copy.header.subtitle;
 
   return (
     <header className="sticky top-0 z-50 border-b border-arc-border/60 bg-arc-bg/85 backdrop-blur-xl">
@@ -51,7 +52,7 @@ export function Header() {
               ArcFirstSwap
             </span>
             <span className="mt-1 text-[10px] uppercase tracking-[0.28em] text-arc-muted">
-              {copy.header.subtitle}
+              {subtitle}
             </span>
           </div>
           <span className="rounded-full border border-arc-border bg-black/25 px-2.5 py-1 text-[10px] uppercase tracking-[0.24em] text-arc-muted">

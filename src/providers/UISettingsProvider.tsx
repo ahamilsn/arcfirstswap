@@ -122,7 +122,7 @@ const strings: Record<Language, UIStrings> = {
       arcTestnet: "Arc Testnet",
     },
     header: {
-      subtitle: "Stablecoin routing desk",
+      subtitle: "ARC Swap AND Bridge",
       badge: "Testnet",
       switchNetwork: "Switch to Arc Testnet",
       languageToggle: "中文",
@@ -319,8 +319,8 @@ const strings: Record<Language, UIStrings> = {
   },
 };
 
-const LANGUAGE_KEY = "arcfirstswap-language";
-const THEME_KEY = "arcfirstswap-theme";
+const LANGUAGE_KEY = "arcfirstswap-language-v2";
+const THEME_KEY = "arcfirstswap-theme-v2";
 
 interface UISettingsContextValue {
   language: Language;
@@ -334,7 +334,7 @@ interface UISettingsContextValue {
 const UISettingsContext = createContext<UISettingsContextValue | null>(null);
 
 export function UISettingsProvider({ children }: { children: React.ReactNode }) {
-  const [language, setLanguage] = useState<Language>("en");
+  const [language, setLanguage] = useState<Language>("zh");
   const [theme, setTheme] = useState<ThemeMode>("dark");
 
   useEffect(() => {
@@ -345,14 +345,10 @@ export function UISettingsProvider({ children }: { children: React.ReactNode }) 
 
     if (storedLanguage === "en" || storedLanguage === "zh") {
       setLanguage(storedLanguage);
-    } else if (window.navigator.language.toLowerCase().startsWith("zh")) {
-      setLanguage("zh");
     }
 
     if (storedTheme === "dark" || storedTheme === "light") {
       setTheme(storedTheme);
-    } else if (window.matchMedia("(prefers-color-scheme: light)").matches) {
-      setTheme("light");
     }
   }, []);
 

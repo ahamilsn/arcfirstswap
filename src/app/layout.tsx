@@ -24,7 +24,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" data-theme="dark" suppressHydrationWarning>
+    <html lang="zh-CN" data-theme="dark" suppressHydrationWarning>
       <body>
         <FetchInterceptor />
         <Providers>{children}</Providers>

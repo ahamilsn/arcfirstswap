@@ -8,11 +8,18 @@ import { StatsBar } from "@/components/StatsBar";
 import { useUISettings } from "@/providers/UISettingsProvider";
 
 export default function Home() {
-  const { copy } = useUISettings();
+  const { copy, language } = useUISettings();
   const signals = [
-    { label: copy.page.signals.settlement, value: copy.page.signals.settlementValue },
+    {
+      label: language === "zh" ? "\u9886\u6c34" : "Faucet",
+      value: "https://faucet.circle.com/",
+      href: "https://faucet.circle.com/",
+    },
     { label: copy.page.signals.gasToken, value: "USDC" },
-    { label: copy.page.signals.wallet, value: copy.page.signals.walletValue },
+    {
+      label: copy.page.signals.wallet,
+      value: language === "zh" ? "\u652f\u6301 MetaMask \u548c OKX" : "Supports MetaMask and OKX",
+    },
   ];
 
   return (
@@ -50,7 +57,18 @@ export default function Home() {
                   <span className="text-[11px] uppercase tracking-[0.16em] text-arc-muted">
                     {row.label}
                   </span>
-                  <p className="mt-2 text-sm font-semibold text-arc-white">{row.value}</p>
+                  {row.href ? (
+                    <a
+                      href={row.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-2 block break-all text-sm font-semibold text-arc-green hover:underline"
+                    >
+                      {row.value}
+                    </a>
+                  ) : (
+                    <p className="mt-2 text-sm font-semibold text-arc-white">{row.value}</p>
+                  )}
                 </div>
               ))}
             </div>
