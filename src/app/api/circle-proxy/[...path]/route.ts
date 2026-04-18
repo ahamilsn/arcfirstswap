@@ -2,6 +2,9 @@ import { type NextRequest, NextResponse } from "next/server";
 
 const CIRCLE_BASE = "https://api.circle.com";
 
+// Circle API Key — only available server-side, never exposed to browser
+const CIRCLE_API_KEY = process.env.CIRCLE_API_KEY ?? "";
+
 /**
  * Proxies browser requests to api.circle.com/v1/stablecoinKits/* server-side,
  * bypassing the browser's CORS restriction on that endpoint.
@@ -40,6 +43,9 @@ async function handler(
 
   const xApiKey = request.headers.get("x-api-key");
   if (xApiKey) forwardHeaders["x-api-key"] = xApiKey;
+
+  // Add server-side Circle API key (overrides any client-supplied key)
+  if (CIRCLE_API_KEY) forwardHeaders["x-api-key"] = CIRCLE_API_KEY;
 
   // Copy any x-* headers the SDK might send
   request.headers.forEach((value, key) => {

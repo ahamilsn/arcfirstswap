@@ -51,7 +51,9 @@ export async function createAdapter(connector?: ConnectorLike | null) {
   return createViemAdapterFromProvider({ provider });
 }
 
-export const KIT_KEY = (process.env.NEXT_PUBLIC_KIT_KEY ?? "").trim();
+// Circle API Key is set server-side only via CIRCLE_API_KEY env var
+// Browser-side uses empty string — key never exposed to frontend
+export const KIT_KEY = "";
 
 export type TxStatus =
   | "idle"
